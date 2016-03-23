@@ -1,0 +1,158 @@
+---
+title: "Course 5 project 1"
+author: "lrcowart"
+date: "March 21, 2016"
+output: html_document
+---
+
+STEP 1
+------
+
+Read activity.csv into a variable called stepdata, and convert the "date" vector from char to date.
+
+```{r, echo=TRUE}
+#Read the file. This assumes activity.csv is in c:/data.
+setwd("c:/data")
+stepdata <- read.csv(file="activity.csv", stringsAsFactors = FALSE)
+
+#convert the date vector from chr to date
+stepdata$date <- as.Date(stepdata$date,  "%Y-%m-%d")
+
+```
+
+STEP 2
+------
+
+Create a data frame steps_per_day that aggregates the total number of steps on any given date. Create a histogram of these data and save it to stepsperday.png. Calculate the mean and median steps per day, ignoring NA values. 
+
+The calculation yields 10766.19 mean steps per day, and 10765 median steps per day.
+
+```{r, echo=TRUE}
+
+steps_per_day <- aggregate(stepdata$steps, by = list(date_recorded = stepdata$date), FUN = sum, simplify = TRUE)
+
+#MAKE PNG
+hist(steps_per_day$x, main = "Steps per day", xlab="Date", ylab="Steps")
+dev.copy(png, file="stepsperday.png", width=480, height=480)
+dev.off()
+
+message("Mean steps per day: ")
+mean(steps_per_day$x, na.rm = TRUE)
+message("Median steps per day: ")
+median(steps_per_day$x, na.rm = TRUE)
+
+```
+
+STEP 3 
+------
+
+Create a data frame steps_per_interval that averages the number of steps in any given interval. Make a time series plot of average steps per interval. 
+
+From this, we identify that the interval with (on average) the most steps is 8:35 a.m.
+
+```{r, echo=TRUE}
+steps_per_interval <- aggregate(stepdata$steps, by = list(interval = stepdata$interval), FUN = mean, na.rm = TRUE)
+
+plot(steps_per_interval$interval, steps_per_interval$x, main="Steps per interval", xlab="Interpret the x-axis as military time: 0 = midnight, 1500 = 3 p.m., etc.", ylab="Mean number of steps", type="l")
+dev.copy(png, file="stepsperinterval.png", width=480, height=480)
+dev.off()
+
+message("Time with maximum average steps per interval:")
+steps_per_interval$interval[which.max(steps_per_interval$x)]
+
+
+```
+
+STEP 4
+------
+
+Here we create a new variable, stepdata_imputed, that replaces NA values with the mean (excluding NA) number of steps for the interval in which the NA appears. We then repeat steps 2-3 to see if this has a material impact on mean, median, and distribution. 
+
+The method of creating the new variable is first to verify that there exists a row for each interval in the original data set (even if it has a NA value for the number of steps). Once this is confirmed, we can create a vector of the mean number of steps for each interval that has as many entries as the original data set. From there, simply replacing any NA values with the corresponding value in the vector finishes the job.
+
+There are 2304 rows in stepdata that have NA values for steps.
+
+With NA values imputed, the mean and median values for steps per day are both 10766.19.
+
+As before, the five-minute interval with the maximum average number of steps begins at 8:35 a.m.
+
+Imputing NA values appears to have no material impact on the results.
+
+```{r, echo=TRUE}
+message("Number of rows that are NA: ")
+sum(is.na(stepdata$steps))
+
+#First, check to make sure that no rows are missing (NA values are ok).
+interval_temp <- rep(steps_per_interval$interval, nrow(steps_per_day))
+error_count <- sum(interval_temp != stepdata$interval)
+
+#error_count is indeed zero, so we move on to creating the vector of 
+#interval means that has length nrow(stepdata), and creating
+#stepdata_imputed which replaces NA values with the mean for that interval.
+
+replacement_values <- rep(steps_per_interval$x, nrow(steps_per_day))
+stepdata_imputed <- stepdata
+replacement <- which(is.na(stepdata_imputed$steps))
+for (i in replacement) {
+	stepdata_imputed$steps[i] <- replacement_values[i]
+}
+
+#We create histograms for steps per day and steps per interval for the imputed values, and save them. 
+
+steps_per_day_imputed <- aggregate(stepdata_imputed$steps, by = list(date_recorded = stepdata_imputed$date), FUN = sum, simplify = TRUE)
+
+#MAKE PNG
+hist(steps_per_day_imputed$x, main = "Steps per day with NA values imputed", xlab="Date", ylab="Steps")
+dev.copy(png, file="stepsperday_imputed.png", width=480, height=480)
+dev.off()
+
+message("Mean steps per day with imputed data for NA: ")
+mean(steps_per_day_imputed$x)
+message("Median steps per day: ")
+median(steps_per_day_imputed$x)
+
+#Steps per interval
+
+steps_per_interval_imputed <- aggregate(stepdata_imputed$steps, by = list(interval = stepdata_imputed$interval), FUN = mean, na.rm = TRUE)
+
+plot(steps_per_interval_imputed$interval, steps_per_interval_imputed$x, main = "Steps per interval with NA values imputed", xlab="Interpret the x-axis as military time: 0 = midnight, 1500 = 3 p.m., etc.", ylab="Mean number of steps", type="l")
+dev.copy(png, file="stepsperinterval_imputed.png", width=480, height=480)
+dev.off()
+
+message("Time with maximum average steps per interval, NA values imputed:")
+steps_per_interval$interval[which.max(steps_per_interval$x)]
+
+
+```
+
+STEP 5
+------
+
+Inspecting the difference in activity between weekdays and weekends
+
+```{r, echo=TRUE}
+#Add a row to stepdata_imputed denoting "weekday" or "weekend".
+
+stepdata_imputed$weekday <- ifelse(is.element(weekdays(stepdata_imputed$date), c("Saturday", "Sunday")), "weekend", "weekday")
+
+#Recall that replacement_values was created above to be a vector of length nrow(stepdata)
+# that contains the mean number of steps for each interval.
+stepdata_imputed$spi <- replacement_values
+
+#Now we make a data frame for the graph without duplicate values.
+
+stepdata_imputed_graph <- aggregate(stepdata_imputed$steps, by = list(interval = stepdata_imputed$interval, weekday = stepdata_imputed$weekday), FUN = mean, na.rm = TRUE)
+
+library(lattice)
+
+xyplot (x ~ interval | weekday, data = stepdata_imputed_graph, type="l", xlab="Interval", ylab = "Number of steps", layout = c(1,2))
+
+dev.copy(png, file="weekend_vs_weekday.png", width=480, height=480)
+dev.off()
+
+```
+
+CONCLUSION
+----------
+
+It appears that weekdays have higher peaks before 10:00 a.m., but weekends have more steps taken overall. One explanation might be that most of the data collectors work during something close to regular business hours during weekedays. 
